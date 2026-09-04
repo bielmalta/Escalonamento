@@ -25,6 +25,28 @@ void verificar_chegadas(Tarefa tarefas[], int total, int tempo) {
     }
 }
 
+int escolher_rate(Tarefa tarefas[], int total) {
+    int escolhida = -1;
+
+    for (int i = 0; i < total; i++) {
+        if (tarefas[i].restante > 0) {
+            if (escolhida == -1 || tarefas[i].periodo < tarefas[escolhida].periodo) {
+                escolhida = i;
+            }
+        }
+    }
+    return escolhida;
+}
+
+void verificar_deadlines(Tarefa tarefas[], int total, int tempo) {
+    for (int i = 0; i < total; i++) {
+        if (tarefas[i].restante > 0 && tempo == tarefas[i].deadline_absoluto) {
+            tarefas[i].perdidos++;
+            tarefas[i].restante = 0;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
 
     if (argc != 3) {
@@ -96,7 +118,17 @@ int main(int argc, char *argv[]) {
     }
     fclose(arquivo);
     for (int tempo = 0; tempo < tempo_total; tempo++) {
-    verificar_chegadas(tarefas, total_tarefas, tempo);
+        verificar_deadlines(tarefas, total_tarefas, tempo);
+        verificar_chegadas(tarefas, total_tarefas, tempo);
+
+        int atual = escolher_rate(tarefas, total_tarefas);
+
+        if (atual != -1) {
+            tarefas[atual].restante--;
+            if (tarefas[atual].restante == 0) {
+            tarefas[atual].completos++;
+            }
+        }
     }
     return 0;
 }
