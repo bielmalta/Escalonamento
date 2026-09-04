@@ -3,6 +3,7 @@
 #include <string.h>
 
 #define MAX_TAREFAS 100
+#define LOGIN "ggm"
 
 typedef struct {
     char nome[20];
@@ -31,6 +32,19 @@ int escolher_rate(Tarefa tarefas[], int total) {
     for (int i = 0; i < total; i++) {
         if (tarefas[i].restante > 0) {
             if (escolhida == -1 || tarefas[i].periodo < tarefas[escolhida].periodo) {
+                escolhida = i;
+            }
+        }
+    }
+    return escolhida;
+}
+
+int escolher_edf(Tarefa tarefas[], int total) {
+    int escolhida = -1;
+
+    for (int i = 0; i < total; i++) {
+        if (tarefas[i].restante > 0) {
+            if (escolhida == -1 || tarefas[i].deadline_absoluto < tarefas[escolhida].deadline_absoluto) {
                 escolhida = i;
             }
         }
@@ -117,18 +131,99 @@ int main(int argc, char *argv[]) {
             break;
     }
     fclose(arquivo);
+    char nome_saida[30];
+
+    snprintf(nome_saida, sizeof(nome_saida), "%s_%s.out", argv[1], LOGIN);
+
+    FILE *saida = fopen(nome_saida, "w");
+
+    if (saida == NULL) {
+        fprintf(stderr, "Erro: nao foi possivel criar arquivo de saida.\n");
+        return 1;
+    }
+
+    if (strcmp(argv[1], "rate") == 0)
+        fprintf(saida, "EXECUTION BY RATE\n");
+    else
+        fprintf(saida, "EXECUTION BY EDF\n");
+
+    int anterior = -2;
+    int unidades = 0;
+
     for (int tempo = 0; tempo < tempo_total; tempo++) {
+        int perdeu = 0;
+
+        if (anterior >= 0 && tarefas[anterior].restante > 0 && tempo == tarefas[anterior].deadline_absoluto) {
+            perdeu = 1;
+        }
+
         verificar_deadlines(tarefas, total_tarefas, tempo);
+
+        if (perdeu) {
+            fprintf(saida, "[%s] for %d units - L\n", tarefas[anterior].nome, unidades); anterior = -2;
+            unidades = 0;
+        }
+
         verificar_chegadas(tarefas, total_tarefas, tempo);
 
-        int atual = escolher_rate(tarefas, total_tarefas);
+        int atual;
 
-        if (atual != -1) {
+        if (strcmp(argv[1], "rate") == 0)
+            atual = escolher_rate(tarefas, total_tarefas);
+        else
+            atual = escolher_edf(tarefas, total_tarefas);
+
+        if (atual != anterior) {
+
+            if (anterior >= 0 && unidades > 0) {
+                fprintf(saida, "[%s] for %d units - H\n", tarefas[anterior].nome, unidades);
+
+            } else if (anterior == -1 && unidades > 0) {
+                fprintf(saida, "idle for %d units\n", unidades);
+            }
+            anterior = atual;
+            unidades = 0;
+        }
+        unidades++;
+
+        if (atual >= 0) {
             tarefas[atual].restante--;
+
             if (tarefas[atual].restante == 0) {
-            tarefas[atual].completos++;
+                tarefas[atual].completos++;
+                fprintf(saida, "[%s] for %d units - F\n", tarefas[atual].nome, unidades);
+
+                anterior = -2;
+                unidades = 0;
             }
         }
     }
+    if (anterior == -1 && unidades > 0) {
+        fprintf(saida, "idle for %d units\n", unidades);
+
+    } else if (anterior >= 0 && unidades > 0) {
+        fprintf(saida, "[%s] for %d units - K\n", tarefas[anterior].nome, unidades);
+    }
+    for (int i = 0; i < total_tarefas; i++) {
+        if (tarefas[i].restante > 0)
+            tarefas[i].killed++;
+    }
+
+    fprintf(saida, "LOST DEADLINES\n");
+
+    for (int i = 0; i < total_tarefas; i++)
+        fprintf(saida, "[%s] %d\n", tarefas[i].nome, tarefas[i].perdidos);
+
+    fprintf(saida, "COMPLETE EXECUTION\n");
+
+    for (int i = 0; i < total_tarefas; i++)
+        fprintf(saida, "[%s] %d\n", tarefas[i].nome, tarefas[i].completos);
+
+    fprintf(saida, "KILLED\n");
+
+    for (int i = 0; i < total_tarefas; i++)
+        fprintf(saida, "[%s] %d\n", tarefas[i].nome, tarefas[i].killed);
+
+    fclose(saida);
     return 0;
 }
